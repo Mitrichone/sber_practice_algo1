@@ -6,11 +6,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Main {
+    public static String FILENAME_DATABASE = "Database.ser";
+    public static PairDatabase DATABASE = new PairDatabase();
 
-    public static void main(String[] args) throws IOException {
-
-        long startTime = System.currentTimeMillis();
-
+    public static void test_read_from_file() throws IOException {
         File f = new File("Запросы.txt");
         final int length = (int) f.length();
 
@@ -28,35 +27,31 @@ public class Main {
             isr.close();
         }
 
-        WordHash wordHash = startHashMap(str);
-        System.out.println(wordHash.edit);
-        System.out.println(wordHash.orig);
-        HashMap<String, Integer> BL = removeSelectEntries(wordHash.edit);
-        System.out.println("Черный список:");
-        System.out.println(BL);
-        System.out.println("\nСписок ключевых слов:");
-        System.out.println(wordHash.edit);
-        System.out.println("Время выполнения (сек): " + (double) (System.currentTimeMillis() - startTime)/1000);
+        newPairDatabase(str);
+    }
 
+
+    public static void main(String[] args) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+
+        test_read_from_file();
+
+        System.out.println(DATABASE.edit);
+        System.out.println(DATABASE.orig);
+        debuggingKeywords();
+        writePairDatabase();
+        clearPairDatabase();
+        readPairDatabase();
+        debuggingKeywords();
+        System.out.println("Время выполнения (сек): " + (double) (System.currentTimeMillis() - startTime)/1000);
+/*
         //region Запись базы
         try {
             FileOutputStream fileOut =
-                    new FileOutputStream("hashmap2.ser");
+                    new FileOutputStream(FILENAME_DATABASE);
             ObjectOutputStream out = new ObjectOutputStream(fileOut);
             out.writeObject(wordHash.edit);
-            out.close();
-            fileOut.close();
-        } catch (IOException i) {
-            i.printStackTrace();
-        }
-        //endregion
-
-        //region Запись черного списка
-        try {
-            FileOutputStream fileOut =
-                    new FileOutputStream("hashmap2BL.ser");
-            ObjectOutputStream out = new ObjectOutputStream(fileOut);
-            out.writeObject(BL);
             out.close();
             fileOut.close();
         } catch (IOException i) {
@@ -67,7 +62,7 @@ public class Main {
         //region Чтение
         HashMap<String, Integer> e = null;
         try {
-            FileInputStream fileIn = new FileInputStream("hashmap2.ser");
+            FileInputStream fileIn = new FileInputStream(FILENAME_DATABASE);
             ObjectInputStream in = new ObjectInputStream(fileIn);
             e = (HashMap<String,Integer>) in.readObject();
             in.close();
@@ -80,9 +75,9 @@ public class Main {
         }
         return;
         //endregion
-
+*/
     }
-    static class WordHash {
+    static class PairDatabase implements Serializable {
         HashMap<String, Integer> edit = new HashMap<String, Integer>();
         HashMap<String, String> orig = new HashMap<String, String>();
 
@@ -94,10 +89,49 @@ public class Main {
             return orig;
         }
 
-        WordHash(HashMap<String, Integer> edit, HashMap<String, String> orig) {
+        PairDatabase(){}
+        PairDatabase(HashMap<String, Integer> edit, HashMap<String, String> orig) {
             this.edit = edit;
             this.orig = orig;
         }
+    }
+
+    public static void debuggingKeywords(){
+        System.out.println("[!] НАЧАЛО ОТЛАДКИ БАЗЫ");
+        int quantityAllWords = DATABASE.edit.size();
+        int quantityPendingWords = 0;
+        for(Map.Entry<String, Integer> entry : DATABASE.edit.entrySet())
+            if (entry.getValue() > 0)
+                quantityPendingWords++;
+        if (quantityPendingWords == 0){
+            System.out.println("[i] В базе не содержится слов требующие обработку");
+            return;
+        }
+        System.out.println("*** Кол-во слов в базе: " + quantityAllWords + "\n*** Ожидающих обработку: " + quantityPendingWords);
+        System.out.println("Ключевые ли следующие слова...\n" +
+                "\"1\" - ДА\n" +
+                "\"2\" - НЕТ\n" +
+                "\"0\" - Остановить отладку\n");
+        int i = 1;
+        Scanner scanner = new Scanner(System.in);
+        for(Map.Entry<String, Integer> entry : DATABASE.edit.entrySet()){
+            if(entry.getValue() > 0){
+                System.out.print("(" + i + "/" + quantityPendingWords + ") "+ entry.getKey() + " ("+DATABASE.orig.get(entry.getKey())+"): " );
+                switch (scanner.nextInt()){
+                    case 1:
+                        entry.setValue(0);
+                        break;
+                    case 2:
+                        entry.setValue(-1);
+                        break;
+                    case 0:
+                        System.out.println("[i] Отладка остановлена. В базе еще " + (quantityPendingWords - i + 1) + " необработанных слов");
+                        return;
+                }
+                i++;
+            }
+        }
+        System.out.println("[i] Отлично! Все слова обработаны");
     }
 
     public static HashMap<String, Integer> removeSelectEntries(HashMap<String, Integer> selects){
@@ -129,21 +163,14 @@ public class Main {
         return r;
     }
 
-    public static WordHash startHashMap(String str) {//<T> HashMap<String, Integer>
+    /**
+     * Создать и вернуть экземпляр парной базы данных: основа слова + оригинальное слово из текста
+     * @param str Строка как входные данные
+     * @return экземпляр класса PairDatabase
+     */
+    public static PairDatabase createPairDatabase(String str) {//<T> HashMap<String, Integer>
         str = str.toLowerCase();
-        Pattern reg = Pattern.compile("[a-zA-Zа-яА-Я]+");/*
-                        + //region Удалить предлоги
-                "(((и)|(да)|(не)|(но)|(так)|(а)|(однако)|(же)|(зато)|(или)|(либо)|(то)|(потому)|(оттого)|(как)|(в)|(виду)|(благодаря)|(тому)|(вследствие)|(того)|(тем)|(чтобы)|(чтоб)|(для)|(когда)|(лишь)|(только)|(пока)|(едва)|(если)|(бы)|(раз)|(ли)|(скоро)|(будто$)|(словно)|(точно)|(хотя)|(ни)|(по)|(при))|" //endregion
-                        + //region Удалить обращения
-                "((вам)|(ваше)|(вас)|(вы))|"
-                //endregion
-                        + //region И НИКАКОГО ДОБРОГО УТРА!1!!!!111
-                "((доброе)|(утро)|(доброго)|(утра)|(хорошего)|(рабочего)|(дня))|"
-                //endregion
-                        + //region Без уважения тем более
-                        "((с)|(уважением)))"
-                //endregion
-                );*/
+        Pattern reg = Pattern.compile("[a-zA-Zа-яА-Я]+");
         HashMap<String, Integer> list = new HashMap<String, Integer>();
         HashMap<String, String> list2 = new HashMap<String, String>();
         Matcher m = reg.matcher(str);
@@ -160,13 +187,73 @@ public class Main {
 
         }
 
-        return new WordHash(sortByValue(list), sortByValue(list2));
+        return new PairDatabase(sortHashMapByValue(list), sortHashMapByValue(list2));
+    }
+
+    /**
+     * Создать и установить экземпляр парной базы данных: основа слова + оригинальное слово из текста
+     */
+    public static void newPairDatabase(PairDatabase pairDatabase) {
+        DATABASE = pairDatabase;
+    }
+    public static void newPairDatabase(String str) {
+        DATABASE = createPairDatabase(str);
+    }
+    public static void clearPairDatabase(){
+        DATABASE = new PairDatabase();
+    }
+
+    public static void readPairDatabase(){
+        readPairDatabase(FILENAME_DATABASE);
+    }
+    public static void readPairDatabase(String fileName){
+        PairDatabase pairDatabase = null;
+        try {
+            FileInputStream fileIn = new FileInputStream(fileName);
+            ObjectInputStream in = new ObjectInputStream(fileIn);
+            pairDatabase = (PairDatabase) in.readObject();
+            in.close();
+            fileIn.close();
+        } catch (IOException i) {
+            i.printStackTrace();
+        } catch (ClassNotFoundException c) {
+            System.out.println("PairDatabase not found");
+            c.printStackTrace();
+        }
+        expandPairDatabase(pairDatabase);
+    }
+
+    public static void expandPairDatabase(PairDatabase pairDatabase){
+        for(Map.Entry<String, Integer> entry : pairDatabase.edit.entrySet())
+            if (!DATABASE.edit.containsKey(entry.getKey())) {
+                DATABASE.edit.put(entry.getKey(), entry.getValue());
+                DATABASE.orig.put(entry.getKey(), pairDatabase.orig.get(entry.getKey()));
+            }
+            else if(DATABASE.edit.get(entry.getKey()) > 0 & entry.getValue() <= 0){
+                DATABASE.edit.put(entry.getKey(), entry.getValue());
+            }
+    }
+
+    public static void writePairDatabase(){
+        writePairDatabase(FILENAME_DATABASE);
+    }
+    public static void writePairDatabase(String fileName){
+        try {
+            FileOutputStream fileOut =
+                    new FileOutputStream(fileName);
+            ObjectOutputStream out = new ObjectOutputStream(fileOut);
+            out.writeObject(DATABASE);
+            out.close();
+            fileOut.close();
+        } catch (IOException i) {
+            i.printStackTrace();
+        }
     }
 
     /**
      * Сортировка HashMap
      */
-    static <K, V extends Comparable<? super V>> HashMap<K, V> sortByValue(HashMap<K, V> map) {
+    private static <K, V extends Comparable<? super V>> HashMap<K, V> sortHashMapByValue(HashMap<K, V> map) {
         List<HashMap.Entry<K, V>> list = new ArrayList<>(map.entrySet());
         list.sort(HashMap.Entry.comparingByValue());
 
@@ -178,6 +265,7 @@ public class Main {
         return result;
     }
 
+    //region TRASH
     /**
      * Расширение базы ключевых слов
      * @param string строка с обрабатываемыми словами
@@ -211,4 +299,5 @@ public class Main {
         }
         writer.close();
     }
+    //endregion
 }
