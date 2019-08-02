@@ -11,7 +11,6 @@ import org.apache.poi.ss.usermodel.Row;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
-import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -31,10 +30,10 @@ public class Main {
 
     //region Variables
 
-    private static String FILENAME_DATABASE_XLS = "Database.xls";
-    private static String FILENAME_DATABASE_SER = "Database.ser";
-    private static Database DATABASE = new Database();
-    private static long startTime = System.currentTimeMillis();
+    private static String FILENAME_DATABASE_XLS = "Database.xls"; //файл таблицы Excel, хранит базу слов с которой работаем
+    private static String FILENAME_DATABASE_SER = "Database.ser"; //сериализованный файл базы (не используется)
+    private static Database DATABASE = new Database(); //экземпляр класса базы, хранит базу в программе
+    private static long startTime = System.currentTimeMillis(); //время старта программы
 
     //endregion
 
@@ -69,13 +68,13 @@ public class Main {
             return this.edit.toString() + "\n" + this.orig.toString();
         }
     }
-
     //endregion
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     //region Start methods
 
+    //проверка существования файла таблицы, затем загрузка или создание файла таблицы
     private static void load() throws IOException {
         if(isFirstStart()){
             System.out.println("[!] Таблицы для работы программы необнаружено!");
@@ -88,6 +87,7 @@ public class Main {
             fromExcelToDatabase();
 
     }
+    //запуск консольного интерфейса
     private static void console() throws IOException {
         while(console_databaseOptions())
             console_databaseOptions();
@@ -106,6 +106,7 @@ public class Main {
 
     //region Console commands and interface
 
+    //меню команд для работы с базой
     private static boolean console_databaseOptions() throws IOException {
         Scanner console = new Scanner(System.in);
         System.out.println("\n*** УПРАВЛЕНИЕ БАЗОЙ\n");
@@ -115,11 +116,16 @@ public class Main {
         else {
             System.out.println("Текущая база в программе (" + DATABASE.edit.size()+ " слов): " + DATABASE.edit+"\n");
         }
-        System.out.println("\"1\" - Открыть таблицу\n" +
+        System.out.println("[Настройка базы]\n" +
+                "\"1\" - Открыть таблицу\n" +
                 "\"2\" - Обновить данные из таблицы\n" +
                 "\"3\" - Сохранить данные в таблицу\n" +
                 "\"4\" - Расширить базу в программе\n" +
-                "\"5\" - Очистить базу в программе\n" +
+                "\"5\" - Очистить базу в программе\n\n" +
+                "[Отладка базы]\n" +
+                "\"6\" - Ручная отладка\n" +
+                "\"7\" - Автоматическая отладка\n\n" +
+                "[Завершение работы]\n" +
                 "\"0\" - Выход");
         while(true){
             System.out.print("> ");
@@ -141,12 +147,19 @@ public class Main {
                 case 5:
                     clearDatabase();
                     return true;
+                case 6:
+                    console_debugDatabase();
+                    return true;
+                case 7:
+                    console_debugDatabaseByReps();
+                    return true;
                 default:
                     System.out.println("[!] Введеной команды не существует!");
                     break;
             }
         }
     }
+    //меню для загрузки/создания базы из файла
     private static void console_readDialog() throws IOException {
         Scanner console = new Scanner(System.in);
         System.out.println("\n*** УСТАНОВКА БАЗЫ\n");
@@ -170,6 +183,47 @@ public class Main {
             }
         }
     }
+    //меню ручной отладки
+    private static void console_debugDatabase() {
+        Scanner console = new Scanner(System.in);
+        System.out.println("\n*** ОТЛАДКА БАЗЫ\n" +
+                "База хранит все слова, которые поступали в программу.\n" +
+                "В пункте \"Повторения\":\nключевые слова помечены \"0\";\n" +
+                "неключевые имеют количество повторений со знаком минус (отрицательные значения);\n" +
+                "необработанные слова имеют количество повторений.\n");
+        System.out.println("\"1\" - Отладка в консоли автоматически найденных необработанных слов\n" +
+                "\"2\" - Ручная отладка в таблице Excel\n" +
+                "\"0\" - Отмена");
+        while(true){
+            System.out.print("> ");
+            switch (console.nextInt()){
+                case 0:
+                    System.out.println("[i] Операция отменена");
+                    return;
+                case 1:
+                    debugDatabase();
+                    return;
+                case 2:
+                    openXLS();
+                    return;
+                default:
+                    System.out.println("[!] Введеной команды не существует!");
+                    break;
+            }
+        }
+    }
+    //меню автоматической отладки
+    private static void console_debugDatabaseByReps(){
+        Scanner console = new Scanner(System.in);
+        System.out.println("\n*** АВТОМАТИЧЕСКАЯ ОТЛАДКА\n" +
+                "Пометить ненужные слова до n повторений (включительно)\n");
+        System.out.print("Введите значение N (\"0\" для отмены ): ");
+        int reps = console.nextInt();
+        if(reps == 0)
+            System.out.println("[i] Операция отменена");
+        else
+            debugDatabaseByReps(reps);
+    }
 
     //endregion
 
@@ -177,6 +231,9 @@ public class Main {
 
     //region Create Database methods
 
+    /**
+     * Создать базу из текста из текстового файла
+     */
     private static void createDatabaseFromTXT(String path) throws IOException {
         File f = new File(path);
         final int length = (int) f.length();
@@ -262,8 +319,8 @@ public class Main {
     /**
      * Запуск отладки ключевых слов в базе
      */
-    private static void debuggingKeywords() {
-        System.out.println("[!] НАЧАЛО ОТЛАДКИ БАЗЫ");
+    private static void debugDatabase() {
+        System.out.println("\n*** НАЧАЛО ОТЛАДКИ БАЗЫ\n");
         int quantityAllWords = DATABASE.edit.size();
         int quantityPendingWords = 0;
         for (Map.Entry<String, Integer> entry : DATABASE.edit.entrySet())
@@ -300,14 +357,20 @@ public class Main {
         System.out.println("[i] Отлично! Все слова обработаны");
     }
     private static void debugDatabaseByReps(int reps) {
-        if (reps < 1)
+        if (reps < 1) {
+            System.out.println("[!] Неверное значение");
             return;
+        }
         for (Map.Entry<String, Integer> entry : DATABASE.edit.entrySet()) {
             if (entry.getValue() <= reps & entry.getValue() > 0) {
                 entry.setValue(-1 * entry.getValue());
             }
         }
+        System.out.println("[i] Слова помечены");
     }
+    /**
+     * Открыть файл таблицы
+     */
     private static void openXLS(){
         openXLS(FILENAME_DATABASE_XLS);
     }
@@ -335,6 +398,9 @@ public class Main {
 
     //region RW methods (Read/Write)
 
+    /**
+     * Сохранить базу из программы в таблицу
+     */
     private static void fromDatabaseToExcel() throws IOException {
         fromDatabaseToExcel(DATABASE);
     }
@@ -432,6 +498,9 @@ public class Main {
 
     }
 
+    /**
+     * Загрузить базу из таблицы в программу
+     */
     private static void fromExcelToDatabase() throws IOException {
         fromExcelToDatabase(FILENAME_DATABASE_XLS);
     }
@@ -523,6 +592,9 @@ public class Main {
 
     //region Other methods
 
+    /**
+     * Стиль для колонок таблицы Excel
+     */
     private static HSSFCellStyle createStyleForTitle(HSSFWorkbook workbook) {
         HSSFFont font = workbook.createFont();
         HSSFCellStyle style = workbook.createCellStyle();
@@ -591,3 +663,4 @@ public class Main {
 
     //endregion
 }
+//666? Совпадение? Не думаю...
